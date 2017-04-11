@@ -6,6 +6,12 @@ import pickle
 from getpass import getpass
 from datetime import datetime, timedelta
 
+# Python 2.7 compatibility
+try:
+    input = raw_input
+except NameError:
+    pass
+
 # XML namespace URLs
 ns = {
     "wsse": "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd",
@@ -33,7 +39,7 @@ def load(filename="sp-session.pkl"):
 
 class SharePointSession(requests.Session):
     def __init__(self, site=None):
-        super().__init__()
+        super(SharePointSession, self).__init__()
         self.password = None
 
         if site is not None:
