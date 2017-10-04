@@ -5,6 +5,7 @@ import xml.etree.ElementTree as et
 import pickle
 from getpass import getpass
 from datetime import datetime, timedelta
+from xml.sax.saxutils import escape
 
 # Python 2.7 compatibility
 try:
@@ -23,8 +24,8 @@ def connect(site):
     return SharePointSession(site)
 
 
-# Load and return saved session object
 def load(filename="sp-session.pkl"):
+    """Load and return saved session object"""
     session = SharePointSession()
     session.__dict__.update(pickle.load(open(filename, "rb")))
     if session._redigest() or session._spauth():
@@ -38,6 +39,18 @@ def load(filename="sp-session.pkl"):
 
 
 class SharePointSession(requests.Session):
+    """A SharePy Requests session.
+
+    Provide session authentication to SharePoint Online sites
+    in addition to standard functionality provided by Requests.
+
+    Basic Usage::
+      >>> import sharepy
+      >>> s = sharepy.connect("example.sharepoint.com")
+      >>> s.get("https://exemple.sharepoint.com/_api/web/lists")
+      <Response [200]>
+    """
+
     def __init__(self, site=None):
         super(SharePointSession, self).__init__()
         self.password = None
@@ -56,14 +69,15 @@ class SharePointSession(requests.Session):
                 })
 
     def _spauth(self):
+        """Authorise SharePoint session by generating session cookie"""
         # Load SAML request template
         with open(os.path.join(os.path.dirname(__file__), "saml-template.xml"), "r") as file:
             saml = file.read()
 
-        # Insert username and password into SAML request
+        # Insert username and password into SAML request after escaping special characters
         password = self.password or getpass("Enter your password: ")
-        saml = saml.format(username=self.username,
-                           password=password,
+        saml = saml.format(username=escape(self.username),
+                           password=escape(password),
                            site=self.site)
 
         # Request security token from Microsoft Online
@@ -95,9 +109,8 @@ class SharePointSession(requests.Session):
         else:
             print("Authentication failed\n")
 
-    # Check and refresh site's request form digest
     def _redigest(self):
-        # Check for expired digest
+        """Check and refresh site's request form digest"""
         if self.expire <= datetime.now():
             # Request site context info from SharePoint site
             response = requests.post("https://" + self.site + "/_api/contextinfo",
@@ -116,12 +129,13 @@ class SharePointSession(requests.Session):
 
         return self.digest
 
-    # Serialise session object and save to file
     def save(self, filename="sp-session.pkl"):
+        """Serialise session object and save to file"""
         mode = "r+b" if os.path.isfile(filename) else "wb"
         pickle.dump(self.__dict__, open(filename, mode))
 
     def post(self, url, *args, **kwargs):
+        """Make POST request and include authorisation headers"""
         if "headers" not in kwargs.keys():
             kwargs["headers"] = {}
         kwargs["headers"]["Authorization"] = "Bearer " + self._redigest()
@@ -129,6 +143,7 @@ class SharePointSession(requests.Session):
         return super().post(url, *args, **kwargs)
 
     def getfile(self, url, *args, **kwargs):
+        """Stream download of specified URL and output to file"""
         # Extract file name from request URL if not provided as keyword argument
         filename = kwargs.pop("filename", re.search("[^\/]+$", url).group(0))
         kwargs["stream"] = True
@@ -141,6 +156,6 @@ class SharePointSession(requests.Session):
                     file.write(chunk)
         return response
 
-    # Create session cookie from response cookie dictionary
     def _buildcookie(self, cookies):
+        """Create session cookie from response cookie dictionary"""
         return "rtFa=" + cookies["rtFa"] + "; FedAuth=" + cookies["FedAuth"]
