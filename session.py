@@ -3,6 +3,7 @@ import re
 import requests
 import xml.etree.ElementTree as et
 import pickle
+import six
 
 from sys import stderr
 
@@ -16,7 +17,7 @@ ns = {
 }
 
 def print_stderr(*values):
-    print(*values, file=stderr)
+    six.print_(*values, file=stderr)
 
 def connect(*args, **kwargs):
     return SharePointSession(*args, **kwargs)
@@ -50,7 +51,7 @@ class SharePointSession(requests.Session):
     """
 
     def __init__(self, site=None, username=None, password=None):
-        super().__init__()
+        super(SharePointSession, self).__init__()
 
         if site is not None and username is not None and password is not None:
             self.username = username
@@ -138,7 +139,8 @@ class SharePointSession(requests.Session):
             kwargs["headers"] = {}
         kwargs["headers"]["Authorization"] = "Bearer " + self._redigest()
 
-        return super().post(url, *args, **kwargs)
+
+        return super(SharePointSession, self).post(url, *args, **kwargs)
 
     def getfile(self, url, *args, **kwargs):
         """Stream download of specified URL and output to file"""
