@@ -18,8 +18,8 @@ ns = {
 def print_stderr(*values):
     print(*values, file=stderr)
 
-def connect(site):
-    return SharePointSession(site)
+def connect(*args, **kwargs):
+    return SharePointSession(*args, **kwargs)
 
 
 def load(filename="sp-session.pkl"):
