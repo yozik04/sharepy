@@ -3,7 +3,9 @@ import re
 import requests
 import xml.etree.ElementTree as et
 import pickle
-from getpass import getpass
+
+from sys import stderr
+
 from datetime import datetime, timedelta
 from xml.sax.saxutils import escape
 
@@ -13,6 +15,8 @@ ns = {
     "d": "http://schemas.microsoft.com/ado/2007/08/dataservices"
 }
 
+def print_stderr(*values):
+    print(*values, file=stderr)
 
 def connect(site):
     return SharePointSession(site)
@@ -40,20 +44,20 @@ class SharePointSession(requests.Session):
 
     Basic Usage::
       >>> import sharepy
-      >>> s = sharepy.connect("example.sharepoint.com")
+      >>> s = sharepy.connect("example.sharepoint.com", username="a@example.com", password="b")
       >>> s.get("https://exemple.sharepoint.com/_api/web/lists")
       <Response [200]>
     """
 
-    def __init__(self, site=None):
+    def __init__(self, site=None, username=None, password=None):
         super().__init__()
-        self.password = None
 
-        if site is not None:
+        if site is not None and username is not None and password is not None:
+            self.username = username
+            self.password = password
+
             self.site = re.sub(r"^https?://", "", site)
             self.expire = datetime.now()
-            # Request credentials from user
-            self.username = input("Enter your username: ")
 
             if self._spauth():
                 self._redigest()
@@ -69,9 +73,8 @@ class SharePointSession(requests.Session):
             saml = file.read()
 
         # Insert username and password into SAML request after escaping special characters
-        password = self.password or getpass("Enter your password: ")
         saml = saml.format(username=escape(self.username),
-                           password=escape(password),
+                           password=escape(self.password),
                            site=self.site)
 
         # Request security token from Microsoft Online
@@ -82,8 +85,8 @@ class SharePointSession(requests.Session):
             root = et.fromstring(response.text)
             token = root.find(".//wsse:BinarySecurityToken", ns).text
         except:
-            print("Token request failed. Check your username and password\n")
-            return
+            print_stderr("Token request failed. Check your username and password\n")
+            return False
 
         # Request access token from sharepoint site
         print("Requesting access cookie...")
@@ -101,7 +104,8 @@ class SharePointSession(requests.Session):
             print("Authentication successful\n")
             return True
         else:
-            print("Authentication failed\n")
+            print_stderr("Authentication failed\n")
+        return False
 
     def _redigest(self):
         """Check and refresh site's request form digest"""
@@ -116,7 +120,7 @@ class SharePointSession(requests.Session):
                 timeout = int(root.find(".//d:FormDigestTimeoutSeconds", ns).text)
                 self.headers.update({"Cookie": self._buildcookie(response.cookies)})
             except:
-                print("Digest request failed")
+                print_stderr("Digest request failed\n")
                 return
             # Calculate digest expiry time
             self.expire = datetime.now() + timedelta(seconds=timeout)
